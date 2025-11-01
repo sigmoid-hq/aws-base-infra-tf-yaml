@@ -1,0 +1,9 @@
+aws:
+  region: ap-northeast-2
+  profile: default
+
+env:
+  project_name: aws-base-infra
+  environment: dev
+  ManagedBy: sigmoid
+
