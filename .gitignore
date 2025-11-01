@@ -49,3 +49,6 @@ keypair/ec2-kp
 
 # Ignore terraform plan files
 *.plan
+
+# YAML based config files
+config/*.yaml
