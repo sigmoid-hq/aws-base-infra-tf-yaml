@@ -17,8 +17,11 @@ across environments (`env/dev`, `env/prod`).
 ## Structure
 ```
 .
+├── config/                 # YAML environment configs consumed by locals
+│   ├── dev.yaml            # Active dev configuration (copy from .sample)
+│   └── prod.yaml           # Production configuration (copy from .sample)
 ├── env/
-│   ├── dev/                  # Development workspace (providers, vars, tfvars)
+│   ├── dev/                  # Development workspace (providers, locals, state backend)
 │   └── prod/                 # Production workspace
 ├── modules/
 │   ├── cloudfront/           # CDN routing for static site + `/api` traffic
@@ -30,6 +33,7 @@ across environments (`env/dev`, `env/prod`).
 │   ├── s3/                   # Static website, logs, and asset buckets
 │   └── vpc/                  # VPC, subnets, NAT, routing
 ├── keypair/                  # SSH public keys consumed by the bastion module
+├── hello.tf
 ├── README.md
 └── terraform.*               # Shared configs / helpers
 ```
@@ -57,43 +61,81 @@ mkdir -p keypair
 ssh-keygen -t ed25519 -f keypair/ec2-kp-prod -C "ops@somedomain"
 
 # Result: keypair/ec2-kp-prod (private) & keypair/ec2-kp-prod.pub (public)
-# Ensure the .pub file name matches `bastion_key_name` used in tfvars.
+# Ensure the .pub file name matches `bastion.key_name` in the YAML config.
 ```
 
 > ⚠️ Never commit private keys. Keep only the public `.pub` file in repo if
 > needed.
 
 ---
-## Deploying Environments
-Each environment maintains its own backend, variables, and tfvars.
+## YAML Configuration
+Environment-specific values now live in YAML under `config/`. Each workspace
+loads its corresponding file via `yamldecode`, so updating infrastructure
+inputs is just a matter of editing YAML.
 
-### 1. Configure `terraform.tfvars`
-Edit the environment-specific `terraform.tfvars` and set secrets:
-```hcl
-# env/dev/terraform.tfvars
-environment           = "dev"
-project_name          = "aws-base-infra"
-region                = "ap-northeast-2"
-prefix                = "sigmoid"
-vpc_cidr              = "10.0.0.0/16"
+1. Copy the sample for each environment:
+   ```bash
+   cp config/dev.yaml.sample config/dev.yaml
+   cp config/prod.yaml.sample config/prod.yaml
+   ```
+2. Fill in secrets such as `rds.master_password` outside of version control.
+   Consider using SOPS or your preferred secrets manager if you need to commit
+   encrypted values.
+3. Optional overrides can go under additional top-level keys; anything set in
+   YAML is picked up by the `locals {}` block in each environment.
 
-bastion_instance_type = "t3.small"
-bastion_key_name      = "ec2-kp"
+Example (`config/dev.yaml`):
+```yaml
+metadata:
+  environment: dev
+  project_name: aws-base-infra
+  prefix: sigmoid
+  managed_by: Sigmoid
 
-rds_engine                 = "mysql"
-rds_engine_version         = "8.0.42"
-rds_database_name          = "sigmoid_app"
-rds_port                   = 3306
-rds_parameter_group_family = "mysql8.0"
-rds_master_password        = "replace-me"
+aws:
+  region: ap-northeast-2
+  profile: default
 
-ecs_repository_name      = "sigmoid-app"
-ecs_image_tag_mutability = "MUTABLE"
-ecs_keep_last_n_images   = 10
-ecs_app_version          = "1.0.2"
+networking:
+  vpc_cidr: 10.0.0.0/16
+
+bastion:
+  instance_type: t3.small
+  key_name: ec2-kp
+
+rds:
+  engine: mysql
+  engine_version: 8.0.42
+  database_name: sigmoid_app
+  port: 3306
+  parameter_group_family: mysql8.0
+  backup_window: 03:00-04:00
+  maintenance_window: sun:05:00-sun:06:00
+  cloudwatch_logs_exports:
+    - error
+    - slowquery
+  performance_insights_enabled: false
+  master_password: "<strong-password>"
+
+ecs:
+  repository_name: sigmoid-app
+  image_tag_mutability: MUTABLE
+  keep_last_n_images: 10
+  app_version: 1.0.2
 ```
-Copy to `env/prod/terraform.tfvars` and adjust CIDR, instance types, password,
-and retention values as needed.
+
+> ℹ️ `terraform.tfvars` files are no longer required. You can still use them for
+> ad-hoc overrides, but the canonical configuration source is the YAML file.
+
+---
+## Deploying Environments
+Each environment maintains its own backend while loading inputs from the
+environment YAML files.
+
+### 1. Review the YAML config
+Update `config/dev.yaml` so metadata, networking, bastion key, database
+credentials, and ECS image settings reflect your environment. Do the same for
+`config/prod.yaml` before promoting.
 
 ### 2. Initialize
 From the environment directory:
@@ -123,8 +165,8 @@ terraform plan -out prod.plan
 terraform apply prod.plan
 ```
 
-> ☝️ Remember to set a strong `rds_master_password` (or source it via
-> environment variables / secrets manager) before applying.
+> ☝️ Remember to set a strong `rds.master_password` in your YAML (or source it
+> via environment variables / secrets manager) before applying.
 
 ---
 ## Useful Outputs
@@ -138,5 +180,5 @@ ARNs, ECS ALB DNS, and the CloudFront distribution domain. Run
   your workstation has permissions.
 - CloudFront is configured with default certs; swap for ACM if using custom
   domains.
-- Update `bastion_key_name` and `terraform.tfvars` before committing to keep
+- Update `bastion_key_name` and the YAML configs before committing to keep
   secrets out of git.
