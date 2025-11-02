@@ -1,0 +1,37 @@
+metadata:
+  environment: prod
+  project_name: aws-base-infra
+  prefix: sigmoid
+  managed_by: Sigmoid
+
+aws:
+  region: ap-northeast-2
+  profile: default
+
+networking:
+  vpc_cidr: 10.20.0.0/16
+
+bastion:
+  instance_type: t3.medium
+  key_name: ec2-kp-prod
+
+rds:
+  engine: mysql
+  engine_version: 8.0.42
+  database_name: sigmoid_app
+  port: 3306
+  parameter_group_family: mysql8.0
+  backup_window: 02:00-04:00
+  maintenance_window: sun:04:00-sun:05:00
+  cloudwatch_logs_exports:
+    - error
+    - slowquery
+    - general
+  performance_insights_enabled: true
+  master_password: "<set-prod-rds-password>"
+
+ecs:
+  repository_name: sigmoid-app
+  image_tag_mutability: MUTABLE
+  keep_last_n_images: 30
+  app_version: 1.0.2

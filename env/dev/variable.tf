@@ -1,11 +1,17 @@
 locals {
-  config = yamldecode(file("${path₩.module}/../../config/dev.yaml"))
+  config     = yamldecode(file("${path.module}/../../config/dev.yaml"))
+  metadata   = lookup(local.config, "metadata", {})
+  aws        = lookup(local.config, "aws", {})
+  networking = lookup(local.config, "networking", {})
+  bastion    = lookup(local.config, "bastion", {})
+  rds        = lookup(local.config, "rds", {})
+  ecs        = lookup(local.config, "ecs", {})
 
   common_tags = merge(
     {
-      Environment = local.config.environment
-      Project     = local.config.project_name
-      ManagedBy   = lookup(local.config, "managed_by", "Sigmoid")
+      Environment = lookup(local.metadata, "environment", null)
+      Project     = lookup(local.metadata, "project_name", null)
+      ManagedBy   = lookup(local.metadata, "managed_by", "Sigmoid")
     },
     lookup(local.config, "tags", {})
   )

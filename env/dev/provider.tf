@@ -14,8 +14,8 @@ terraform {
 }
 
 provider "aws" {
-  region  = local.config.region
-  profile = lookup(local.config, "aws_profile", null)
+  region  = lookup(local.aws, "region", null)
+  profile = lookup(local.aws, "profile", null)
 
   default_tags {
     tags = local.common_tags
